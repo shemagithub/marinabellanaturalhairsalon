@@ -30,3 +30,16 @@ pnpm run dev:web
 - API: http://localhost:8080
 
 Copy `.env.example` and `artifacts/mallinabella-salon/.env.example`, then add your Clerk keys.
+
+## Vercel multi-service deploy
+
+`vercel.json` defines two services in one project:
+
+| Service | Public path | Role |
+|---|---|---|
+| `mallinabella-salon` | `/` | Vite website |
+| `api-server` | `/api/*` | Express API |
+
+The browser calls relative `/api/...` URLs, so no service binding is required today. Set `DATABASE_URL`, Clerk keys, and other secrets in the Vercel project env.
+
+`mockup-sandbox` is intentionally not deployed.

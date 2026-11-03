@@ -1,0 +1,29 @@
+{
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "services": {
+    "api-server": {
+      "root": "artifacts/api-server",
+      "framework": "express",
+      "installCommand": "cd ../.. && corepack enable && corepack prepare pnpm@11.9.0 --activate && CI=true pnpm install --frozen-lockfile",
+      "buildCommand": "cd ../.. && CI=true pnpm --filter @workspace/db run prisma:generate && CI=true pnpm --filter @workspace/api-server run build",
+      "entrypoint": "dist/index.mjs"
+    },
+    "mallinabella-salon": {
+      "root": "artifacts/mallinabella-salon",
+      "framework": "vite",
+      "installCommand": "cd ../.. && corepack enable && corepack prepare pnpm@11.9.0 --activate && CI=true pnpm install --frozen-lockfile",
+      "buildCommand": "cd ../.. && CI=true BASE_PATH=/ pnpm --filter @workspace/mallinabella-salon run build",
+      "outputDirectory": "dist/public"
+    }
+  },
+  "rewrites": [
+    {
+      "source": "/api/(.*)",
+      "destination": { "service": "api-server" }
+    },
+    {
+      "source": "/(.*)",
+      "destination": { "service": "mallinabella-salon" }
+    }
+  ]
+}
