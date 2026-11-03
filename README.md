@@ -1,6 +1,6 @@
 # Marina Bella Natural Hair Saloon
 
-Salon website and booking management system for **Marina Bella Natural Hair Saloon**.
+Salon website and booking management for **Marina Bella Natural Hair Saloon**.
 
 ## Features
 
@@ -8,38 +8,33 @@ Salon website and booking management system for **Marina Bella Natural Hair Salo
 - Prices in Rwandan francs (RWF)
 - Staff portal for schedule, clients, services, and campaigns
 - Walk-in client registration with marketing opt-in
-- Clerk authentication for staff and client accounts
+- Frontend-only data (browser localStorage) — no backend required to host
 
 ## Stack
 
-- pnpm workspaces, Vite + React, Express API
-- PostgreSQL + Prisma
-- Clerk auth
+- pnpm workspaces, Vite + React
+- Optional Clerk auth if you add a publishable key
 
 ## Local development
 
 ```bash
 pnpm install
-pnpm run db:local
-pnpm run db:generate && pnpm run db:push && pnpm run db:seed
-pnpm run dev:api
 pnpm run dev:web
 ```
 
 - Web: http://localhost:23568
-- API: http://localhost:8080
 
-Copy `.env.example` and `artifacts/mallinabella-salon/.env.example`, then add your Clerk keys.
+Optional: copy `artifacts/mallinabella-salon/.env.example` and set `VITE_CLERK_PUBLISHABLE_KEY` if you want Clerk sign-in. Without it, the site still works and staff portal / bookings use local browser storage.
 
-## Vercel multi-service deploy
+## Vercel deploy (static frontend)
 
-`vercel.json` defines two services in one project:
+`vercel.json` builds only the Vite site. No database, API, or backend env vars are required.
 
-| Service | Public path | Role |
-|---|---|---|
-| `mallinabella-salon` | `/` | Vite website |
-| `api-server` | `/api/*` | Express API |
+1. Import the GitHub repo on Vercel
+2. Keep root directory at `./`
+3. Deploy
 
-The browser calls relative `/api/...` URLs, so no service binding is required today. Set `DATABASE_URL`, Clerk keys, and other secrets in the Vercel project env.
+Staff portal: `/admin`  
+My visits: `/account`
 
-`mockup-sandbox` is intentionally not deployed.
+Bookings, clients, services edits, and campaigns are saved in the visitor’s browser (`localStorage`).

@@ -28,8 +28,8 @@ import {
   useSendCampaign,
   useUpdateBooking,
   useUpdateService,
-} from '@workspace/api-client-react';
-import type { Booking, Service, ServiceInput } from '@workspace/api-client-react';
+} from '@/lib/salon-api';
+import type { Booking, Service, ServiceInput } from '@/lib/salon-api';
 import {
   ArrowDown, ArrowLeft, ArrowRight, CalendarDays, Check,
   Clock3, Flower2, Mail, Menu, Plus, Scissors, Search,
@@ -175,10 +175,7 @@ function Brand({ light = false }: { light?: boolean }) {
 
 function PublicAuthActions() {
   if (!clerkConfigured) {
-    return <>
-      <Link href="/sign-in" className="opacity-80 transition-opacity hover:opacity-100" data-testid="link-sign-in">Sign in</Link>
-      <Link href="/sign-up" className="opacity-80 transition-opacity hover:opacity-100" data-testid="link-sign-up">Create account</Link>
-    </>;
+    return <Link href="/account" className="opacity-80 transition-opacity hover:opacity-100" data-testid="link-my-account">My visits</Link>;
   }
   return <PublicAuthActionsClerk />;
 }
@@ -236,7 +233,7 @@ function PublicHeader() {
           <a href="#services" className={navLink}>Services</a>
           <a href="#lookbook" className={navLink}>Lookbook</a>
           <a href="#team" className={navLink}>Artists</a>
-          {clerkConfigured ? <Show when="signed-in"><Link href="/admin" className={`${navLink} opacity-80`} data-testid="link-staff">Staff portal</Link></Show> : null}
+          <Link href="/admin" className={`${navLink} opacity-80`} data-testid="link-staff">Staff portal</Link>
           <PublicAuthActions />
           <a href="#book" className={bookLink}>Book a visit</a>
         </nav>
@@ -261,7 +258,7 @@ function PublicHeader() {
           <a href="#team" onClick={closeMenu}>Artists</a>
           <a href="#book" onClick={closeMenu}>Book a visit</a>
           <PublicAuthActions />
-          {clerkConfigured ? <Show when="signed-in"><Link href="/admin" onClick={closeMenu} data-testid="link-staff-mobile">Staff portal</Link></Show> : null}
+          <Link href="/admin" onClick={closeMenu} data-testid="link-staff-mobile">Staff portal</Link>
         </nav>
       )}
     </header>
@@ -797,6 +794,22 @@ function CampaignManager() {
   </div>;
 }
 
+function LocalAccountPage() {
+  const bookingsQuery = useGetMyBookings({ query: { queryKey: getGetMyBookingsQueryKey() } });
+  const bookings = (bookingsQuery.data ?? []).slice().sort((a, b) => a.startAt.localeCompare(b.startAt));
+  return <main className="salon-shell min-h-[100dvh]">
+    <header className="border-b border-[#e1d6ca] bg-[#f8f4ed] px-5 py-4 md:px-10"><div className="mx-auto flex max-w-6xl items-center justify-between"><Brand /><div className="flex items-center gap-4 text-xs"><Link href="/" className="text-[#77695f] hover:text-[#9d6857]" data-testid="link-account-home">Salon home</Link><Link href="/admin" className="text-[#8c594b]" data-testid="link-account-admin">Staff portal</Link></div></div></header>
+    <div className="mx-auto max-w-6xl px-5 py-10 md:px-10 md:py-16">
+      <div className="mb-8 border-b border-[#dfd4c8] pb-6"><p className="eyebrow">Your {brandName} visits</p><h1 className="serif mt-2 text-4xl">Welcome back.</h1><p className="mt-2 text-sm text-[#76695e]">Bookings on this device are saved in your browser.</p></div>
+      <section className="border border-[#e3d9ce] bg-[#fcfaf6]">
+        <div className="border-b border-[#e7ded5] px-5 py-4 md:px-7"><p className="eyebrow">Your visits</p><h2 className="serif mt-1 text-2xl">Appointment history</h2></div>
+        {bookingsQuery.isLoading ? <div className="p-5"><LoadingBlock rows={4} /></div> : bookingsQuery.isError ? <div className="p-5"><QueryError retry={() => void bookingsQuery.refetch()} /></div> : bookings.length ? <div className="divide-y divide-[#eee6de]">{bookings.map((booking) => <BookingLine key={booking.id} booking={booking} />)}</div> : <div className="px-5 py-14 text-center"><CalendarDays className="mx-auto text-[#a48a78]" size={25} /><h3 className="serif mt-4 text-xl">Your first visit is waiting.</h3><p className="mt-2 text-xs text-[#8c7d72]">Once you book, your appointments will be gathered here.</p><Link href="/#book" className="btn-primary mt-5" data-testid="link-account-book">Book a visit <ArrowRight size={14} /></Link></div>}
+      </section>
+      <p className="mt-5 text-[11px] text-[#9a8b80]">Frontend-only mode — no backend required.</p>
+    </div>
+  </main>;
+}
+
 function AccountPage() {
   const { user } = useUser();
   const { signOut } = useClerk();
@@ -826,12 +839,12 @@ function AuthUnavailable() {
   </main>;
 }
 function ProtectedAdmin() {
-  // Allow local staff use before Clerk secret/admin role is fully wired.
+  // Frontend-only mode: staff portal is open without a backend/auth server.
   if (!clerkConfigured) return <AdminShell />;
   return <><Show when="signed-in"><AdminShell /></Show><Show when="signed-out"><Redirect to="/sign-in" /></Show></>;
 }
 function ProtectedAccount() {
-  if (!clerkConfigured) return <AuthUnavailable />;
+  if (!clerkConfigured) return <LocalAccountPage />;
   return <><Show when="signed-in"><AccountPage /></Show><Show when="signed-out"><Redirect to="/sign-in" /></Show></>;
 }
 function SignInPage() {
