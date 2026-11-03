@@ -31,6 +31,7 @@ import type {
   CampaignInput,
   CampaignSendResult,
   Client,
+  ClientInput,
   DashboardSummary,
   GetAvailabilityParams,
   HealthStatus,
@@ -1126,6 +1127,94 @@ export function useListClients<TData = Awaited<ReturnType<typeof listClients>>, 
 
 
 
+
+export const getCreateClientUrl = () => {
+
+
+
+
+  return `/api/clients`
+}
+
+/**
+ * @summary Register a salon client
+ */
+export const createClient = async (clientInput: ClientInput, options?: Parameters<typeof customFetch>[1]): Promise<Client> => {
+
+    const getHeaders = (h?: NonNullable<RequestInit['headers']>): Record<string, string | readonly string[]> => {
+    if (!h) return {};
+    if (h instanceof Headers) return Object.fromEntries(h.entries());
+    if (Symbol.iterator in h) {
+      return Object.fromEntries(
+        Array.from(h as Iterable<Iterable<string>>, (entry) => Array.from(entry) as [string, string]),
+      );
+    }
+    const headers: Record<string, string | readonly string[]> = {};
+    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
+      if (value !== undefined) headers[name] = value;
+    }
+    return headers;
+  };
+return customFetch<Client>(getCreateClientUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...getHeaders(options?.headers) },
+    body: JSON.stringify(clientInput)
+  }
+);}
+
+
+
+
+
+export const getCreateClientMutationKey = () => ['createClient'] as const;
+
+export const getCreateClientMutationOptions = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof createClient>>, TError,CreateClientMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof createClient>>, TError,CreateClientMutationVariables, TContext> => {
+
+const mutationKey = getCreateClientMutationKey();
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof createClient>>, CreateClientMutationVariables> = (props) => {
+          const {data} = props ?? {};
+
+          return  createClient(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type CreateClientMutationResult = NonNullable<Awaited<ReturnType<typeof createClient>>>
+    export type CreateClientMutationBody = BodyType<ClientInput>
+    export type CreateClientMutationError = ErrorType<void>
+    export type CreateClientMutationVariables = {data: BodyType<ClientInput>}
+
+    /**
+ * @summary Register a salon client
+ */
+export const useCreateClient = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof createClient>>, TError,CreateClientMutationVariables, TContext>, request?: SecondParameter<typeof customFetch>}
+ , queryClient?: QueryClient): UseMutationResult<
+        Awaited<ReturnType<typeof createClient>>,
+        TError,
+        CreateClientMutationVariables,
+        TContext
+      > => {
+      return useMutation(getCreateClientMutationOptions(options), queryClient);
+    }
 
 export const getGetMyBookingsUrl = () => {
 

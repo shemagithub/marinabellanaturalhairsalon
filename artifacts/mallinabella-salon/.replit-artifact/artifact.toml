@@ -1,6 +1,6 @@
 kind = "web"
 previewPath = "/"
-title = "Mallinabella Salon"
+title = "Marina Bella Natural Hair Saloon"
 description = "An elegant salon website with service discovery, appointment booking, client follow-up, and staff tools for scheduling, client records, services, and promotions."
 version = "1.0.0"
 id = "artifacts/mallinabella-salon"

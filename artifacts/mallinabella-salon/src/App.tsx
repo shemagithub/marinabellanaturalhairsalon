@@ -14,6 +14,7 @@ import {
   getListServicesQueryKey,
   useCreateBooking,
   useCreateCampaign,
+  useCreateClient,
   useCreateService,
   useDeleteService,
   useGetAvailability,
@@ -41,13 +42,18 @@ import { TooltipProvider } from '@/components/ui/tooltip';
 import NotFound from '@/pages/not-found';
 
 const queryClient = new QueryClient();
-const clerkPubKey = publishableKeyFromHost(
-  window.location.hostname,
-  import.meta.env.VITE_CLERK_PUBLISHABLE_KEY,
-);
-const clerkProxyUrl = import.meta.env.VITE_CLERK_PROXY_URL;
+const envClerkPublishableKey = String(import.meta.env.VITE_CLERK_PUBLISHABLE_KEY || '').trim();
+// Only enable Clerk when a real publishable key is provided. Host-derived keys
+// (e.g. clerk.localhost) fail outside Replit and break the public site overlay.
+const clerkConfigured = /^pk_(test|live)_/.test(envClerkPublishableKey);
+const clerkPubKey = clerkConfigured
+  ? publishableKeyFromHost(window.location.hostname, envClerkPublishableKey)
+  : '';
+const clerkProxyUrl = String(import.meta.env.VITE_CLERK_PROXY_URL || '').trim() || undefined;
 const basePath = import.meta.env.BASE_URL.replace(/\/$/, '');
-if (!clerkPubKey) throw new Error('Missing VITE_CLERK_PUBLISHABLE_KEY in .env file');
+if (!clerkConfigured) {
+  console.warn('Missing VITE_CLERK_PUBLISHABLE_KEY — auth routes will be unavailable.');
+}
 function stripBase(path: string): string {
   return basePath && path.startsWith(basePath) ? path.slice(basePath.length) || '/' : path;
 }
@@ -99,7 +105,23 @@ const clerkAppearance = {
     main: 'text-[#392f2a]',
   },
 };
-const money = (amount: number) => new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 }).format(amount);
+const brandName = 'Marina Bella';
+const brandTagline = 'NATURAL HAIR SALOON';
+const companyName = 'Marina Bella Natural Hair Saloon';
+const money = (amount: number) => new Intl.NumberFormat('en-RW', { style: 'currency', currency: 'RWF', maximumFractionDigits: 0 }).format(amount);
+const salonImages = {
+  interior: `${basePath}/images/mallinabella-salon-interior.jpg`,
+  curls: `${basePath}/images/mallinabella-curls.jpg`,
+  braids: `${basePath}/images/mallinabella-knotless-braids.jpg`,
+  manicure: `${basePath}/images/mallinabella-manicure.jpg`,
+} as const;
+const lookbook = [
+  { src: salonImages.interior, alt: `Warm ${companyName} interior`, caption: 'The studio' },
+  { src: salonImages.curls, alt: `Defined curls after a ${brandName} appointment`, caption: 'Soft curls' },
+  { src: salonImages.braids, alt: 'Finished knotless braids', caption: 'Knotless braids' },
+  { src: salonImages.manicure, alt: 'Gel manicure detail', caption: 'Manicure finish' },
+] as const;
+const stylistFallbackImages = [salonImages.curls, salonImages.braids, salonImages.manicure];
 const dateLabel = (value: string) => new Intl.DateTimeFormat('en-US', { weekday: 'short', month: 'short', day: 'numeric' }).format(new Date(value));
 const timeLabel = (value: string) => new Intl.DateTimeFormat('en-US', { hour: 'numeric', minute: '2-digit' }).format(new Date(value));
 const icsEscape = (value: string) => value.replace(/\\/g, '\\\\').replace(/,/g, '\\,').replace(/;/g, '\\;').replace(/\r?\n/g, '\\n');
@@ -108,10 +130,10 @@ function downloadAppointmentInvite(booking: Booking) {
   const event = [
     'BEGIN:VCALENDAR',
     'VERSION:2.0',
-    'PRODID:-//Mallinabella Salon//Appointment//EN',
+    `PRODID:-//${companyName}//Appointment//EN`,
     'CALSCALE:GREGORIAN',
     'BEGIN:VEVENT',
-    `UID:${icsEscape(booking.id)}@mallinabella`,
+    `UID:${icsEscape(booking.id)}@marinabella`,
     `DTSTAMP:${icsTimestamp(new Date().toISOString())}`,
     `DTSTART:${icsTimestamp(booking.startAt)}`,
     `DTEND:${icsTimestamp(booking.endAt)}`,
@@ -123,7 +145,7 @@ function downloadAppointmentInvite(booking: Booking) {
   const url = URL.createObjectURL(new Blob([event], { type: 'text/calendar;charset=utf-8' }));
   const anchor = document.createElement('a');
   anchor.href = url;
-  anchor.download = `mallinabella-appointment-${booking.id}.ics`;
+  anchor.download = `marina-bella-appointment-${booking.id}.ics`;
   document.body.append(anchor);
   anchor.click();
   anchor.remove();
@@ -147,11 +169,20 @@ function QueryError({ retry }: { retry: () => void }) {
 function Brand({ light = false }: { light?: boolean }) {
   return <Link href="/" className={`inline-flex items-center gap-3 ${light ? 'text-[#f8f1e8]' : 'text-[#392f2a]'}`} data-testid="link-brand">
     <span className="flex h-9 w-9 items-center justify-center rounded-full border border-current/35"><Flower2 size={19} strokeWidth={1.35} /></span>
-    <span className="leading-tight"><span className="serif block text-[20px] tracking-[.035em]">Mallinabella</span><span className="block pt-0.5 text-[8px] font-semibold tracking-[.28em] opacity-70">SALON · BEAUTY STUDIO</span></span>
+    <span className="leading-tight"><span className="serif block text-[18px] tracking-[.02em] md:text-[20px]">{brandName}</span><span className="block max-w-[11rem] pt-0.5 text-[7px] font-semibold tracking-[.18em] opacity-70 md:text-[8px] md:tracking-[.22em]">{brandTagline}</span></span>
   </Link>;
 }
 
 function PublicAuthActions() {
+  if (!clerkConfigured) {
+    return <>
+      <Link href="/sign-in" className="opacity-80 transition-opacity hover:opacity-100" data-testid="link-sign-in">Sign in</Link>
+      <Link href="/sign-up" className="opacity-80 transition-opacity hover:opacity-100" data-testid="link-sign-up">Create account</Link>
+    </>;
+  }
+  return <PublicAuthActionsClerk />;
+}
+function PublicAuthActionsClerk() {
   const { signOut } = useClerk();
   const { user } = useUser();
   return <>
@@ -168,24 +199,73 @@ function PublicAuthActions() {
 
 function PublicHeader() {
   const [menuOpen, setMenuOpen] = useState(false);
-  return <header className="absolute inset-x-0 top-0 z-20 border-b border-white/20 text-[#fcf7f0]">
-    <div className="mx-auto flex max-w-7xl items-center justify-between px-5 py-4 md:px-10">
-      <Brand light />
-      <nav className="hidden items-center gap-9 text-[10px] font-semibold uppercase tracking-[.18em] md:flex">
-        <a href="#services" className="transition-opacity hover:opacity-70">Services</a><a href="#story" className="transition-opacity hover:opacity-70">Our salon</a><a href="#team" className="transition-opacity hover:opacity-70">Artists</a>
-        <Show when="signed-in"><Link href="/admin" className="opacity-70 transition-opacity hover:opacity-100" data-testid="link-staff">Staff portal</Link></Show>
-        <PublicAuthActions />
-        <a href="#book" className="border border-[#f5e9dc]/60 px-5 py-3 transition-colors hover:bg-[#f5e9dc] hover:text-[#382f2b]">Book a visit</a>
-      </nav>
-      <button aria-label="Toggle navigation" className="md:hidden" onClick={() => setMenuOpen(!menuOpen)} data-testid="button-mobile-menu">{menuOpen ? <X /> : <Menu />}</button>
-    </div>
-    {menuOpen && <nav className="grid gap-4 border-t border-white/20 bg-[#352d29]/95 px-6 py-5 text-xs uppercase tracking-[.15em] md:hidden">
-      <a href="#services" onClick={() => setMenuOpen(false)}>Services</a><a href="#story" onClick={() => setMenuOpen(false)}>Our salon</a><a href="#team" onClick={() => setMenuOpen(false)}>Artists</a>
-      <a href="#book" onClick={() => setMenuOpen(false)}>Book a visit</a>
-      <PublicAuthActions />
-      <Show when="signed-in"><Link href="/admin" data-testid="link-staff-mobile">Staff portal</Link></Show>
-    </nav>}
-  </header>;
+  const [scrolled, setScrolled] = useState(false);
+
+  useEffect(() => {
+    let lastY = window.scrollY;
+    const onScroll = () => {
+      const y = window.scrollY;
+      setScrolled(y > 24);
+      if (Math.abs(y - lastY) > 8) setMenuOpen(false);
+      lastY = y;
+    };
+    onScroll();
+    window.addEventListener('scroll', onScroll, { passive: true });
+    return () => window.removeEventListener('scroll', onScroll);
+  }, []);
+
+  const closeMenu = () => setMenuOpen(false);
+  const navLink = scrolled
+    ? 'text-[#4a3d36] transition-opacity hover:opacity-70'
+    : 'text-[#fcf7f0] transition-opacity hover:opacity-70';
+  const bookLink = scrolled
+    ? 'border border-[#9d6857] bg-[#9d6857] px-5 py-3 text-white transition-colors hover:bg-[#805344]'
+    : 'border border-[#f5e9dc]/60 px-5 py-3 transition-colors hover:bg-[#f5e9dc] hover:text-[#382f2b]';
+
+  return (
+    <header
+      className={`fixed inset-x-0 top-0 z-50 transition-[background-color,box-shadow,border-color,color] duration-300 ${
+        scrolled
+          ? 'border-b border-[#e4d9cd] bg-[#f8f4ed]/95 text-[#392f2a] shadow-[0_8px_28px_rgba(57,47,42,.08)] backdrop-blur-md'
+          : 'border-b border-white/20 bg-[#342b28]/35 text-[#fcf7f0] backdrop-blur-sm'
+      }`}
+    >
+      <div className="mx-auto flex max-w-7xl items-center justify-between gap-4 px-5 py-4 md:px-10">
+        <Brand light={!scrolled} />
+        <nav className="hidden items-center gap-7 text-[10px] font-semibold uppercase tracking-[.18em] lg:gap-9 md:flex">
+          <a href="#services" className={navLink}>Services</a>
+          <a href="#lookbook" className={navLink}>Lookbook</a>
+          <a href="#team" className={navLink}>Artists</a>
+          {clerkConfigured ? <Show when="signed-in"><Link href="/admin" className={`${navLink} opacity-80`} data-testid="link-staff">Staff portal</Link></Show> : null}
+          <PublicAuthActions />
+          <a href="#book" className={bookLink}>Book a visit</a>
+        </nav>
+        <button
+          aria-label="Toggle navigation"
+          aria-expanded={menuOpen}
+          className={`md:hidden ${scrolled ? 'text-[#392f2a]' : 'text-[#fcf7f0]'}`}
+          onClick={() => setMenuOpen((open) => !open)}
+          data-testid="button-mobile-menu"
+        >
+          {menuOpen ? <X /> : <Menu />}
+        </button>
+      </div>
+      {menuOpen && (
+        <nav className={`grid gap-4 border-t px-6 py-5 text-xs uppercase tracking-[.15em] md:hidden ${
+          scrolled
+            ? 'border-[#e4d9cd] bg-[#f8f4ed] text-[#392f2a]'
+            : 'border-white/20 bg-[#352d29]/98 text-[#fcf7f0]'
+        }`}>
+          <a href="#services" onClick={closeMenu}>Services</a>
+          <a href="#lookbook" onClick={closeMenu}>Lookbook</a>
+          <a href="#team" onClick={closeMenu}>Artists</a>
+          <a href="#book" onClick={closeMenu}>Book a visit</a>
+          <PublicAuthActions />
+          {clerkConfigured ? <Show when="signed-in"><Link href="/admin" onClick={closeMenu} data-testid="link-staff-mobile">Staff portal</Link></Show> : null}
+        </nav>
+      )}
+    </header>
+  );
 }
 
 function BookingForm() {
@@ -242,7 +322,7 @@ function BookingForm() {
       onError: () => setMessage('That time may have just been taken. Please choose another opening.'),
     });
   };
-  return <section id="book" className="scroll-mt-10 bg-[#eee5d9] px-5 py-16 md:px-10 md:py-24">
+  return <section id="book" className="scroll-mt-28 bg-[#eee5d9] px-5 py-16 md:px-10 md:py-24">
     <div className="mx-auto grid max-w-6xl gap-10 lg:grid-cols-[.72fr_1fr] lg:gap-20">
       <div className="pt-2">
         <p className="eyebrow">Your time, beautifully spent</p>
@@ -306,27 +386,33 @@ function PublicHome() {
   const categories = ['All', ...Array.from(new Set(activeServices.map((service) => service.category)))];
   const visibleServices = category === 'All' ? activeServices : activeServices.filter((service) => service.category === category);
   return <main className="salon-shell">
-    <section className="relative flex min-h-[690px] items-end overflow-hidden bg-[#342b28] pb-14 text-[#f8f1e8] md:min-h-[800px] md:pb-20">
-      <div className="absolute inset-0 opacity-80" style={{ background: 'radial-gradient(ellipse at 78% 43%, #9a7161 0%, #6e5147 22%, transparent 49%), radial-gradient(ellipse at 73% 94%, #b78e71 0%, transparent 28%), linear-gradient(115deg,#332b28 2%,#493a34 50%,#72564a 100%)' }} />
-      <div className="absolute inset-0 opacity-[.16]" style={{ backgroundImage: 'repeating-linear-gradient(117deg, transparent 0px, transparent 28px, #eed9c81c 29px, transparent 30px)' }} />
-      <div className="absolute right-[-8%] top-[17%] h-[450px] w-[450px] rounded-full border border-[#f3e3d2]/20 md:right-[10%] md:h-[580px] md:w-[580px]" />
-      <div className="absolute right-[2%] top-[23%] h-[350px] w-[350px] rounded-full border border-[#f3e3d2]/15 md:right-[17%] md:h-[460px] md:w-[460px]" />
-      <PublicHeader />
+    <PublicHeader />
+    <section className="relative flex min-h-[100svh] items-end overflow-hidden bg-[#342b28] pb-14 pt-28 text-[#f8f1e8] md:pb-20">
+      <img
+        src={salonImages.interior}
+        alt={`${companyName} interior`}
+        className="absolute inset-0 h-full w-full scale-105 object-cover object-center"
+        fetchPriority="high"
+      />
+      <div className="absolute inset-0 bg-gradient-to-r from-[#241c19]/88 via-[#342b28]/62 to-[#342b28]/28" />
+      <div className="absolute inset-0 bg-gradient-to-t from-[#241c19]/75 via-transparent to-[#241c19]/25" />
       <div className="relative mx-auto w-full max-w-7xl px-5 md:px-10">
-        <div className="max-w-[750px] rise-in">
-          <div className="mb-6 flex items-center gap-3 text-[10px] font-semibold uppercase tracking-[.25em] text-[#e8cbbb]"><span className="h-px w-10 bg-[#c89279]" /> A modern ritual of beauty</div>
-          <h1 className="serif text-[clamp(3.5rem,9vw,7.5rem)] leading-[.94] tracking-[-.04em]">Come as you are.<br /><i className="font-medium text-[#d9ae9b]">Leave luminous.</i></h1>
-          <p className="mt-7 max-w-lg text-sm leading-7 text-[#e3d6cb] md:text-base">A considered salon experience, shaped around you. Thoughtful hands, beautiful details, and space to feel like yourself.</p>
-          <div className="mt-9 flex flex-wrap items-center gap-5"><a href="#book" className="inline-flex items-center gap-3 bg-[#d2a38d] px-6 py-4 text-[10px] font-bold uppercase tracking-[.16em] text-[#392e29] transition-transform hover:-translate-y-0.5" data-testid="link-hero-book">Find your moment <ArrowRight size={15} /></a><a href="#services" className="text-[10px] font-semibold uppercase tracking-[.17em] text-[#e7d9cf]">Explore the menu <ArrowDown className="ml-2 inline" size={14} /></a></div>
-          <div className="mt-14 flex items-center gap-5 border-t border-[#f1dfd0]/20 pt-5 text-[10px] uppercase tracking-[.15em] text-[#d7c5b8]"><span>A salon for all of you</span><span className="h-1 w-1 rounded-full bg-[#cb957d]" /><span>Care, with character</span></div>
+        <div className="max-w-[720px] rise-in">
+          <p className="serif text-[clamp(2.4rem,7vw,5.6rem)] leading-[.94] tracking-[-.03em]">{brandName}</p>
+          <p className="mt-3 text-[10px] font-semibold uppercase tracking-[.22em] text-[#e8cbbb]">{brandTagline}</p>
+          <h1 className="serif mt-4 text-[clamp(1.7rem,3.6vw,2.6rem)] font-medium leading-tight text-[#f1dfd0]">Come as you are. Leave luminous.</h1>
+          <p className="mt-5 max-w-md text-sm leading-7 text-[#e3d6cb] md:text-base">A considered salon experience shaped around your hair, your pace, and the way you want to feel.</p>
+          <div className="mt-8 flex flex-wrap items-center gap-5">
+            <a href="#book" className="inline-flex items-center gap-3 bg-[#d2a38d] px-6 py-4 text-[10px] font-bold uppercase tracking-[.16em] text-[#392e29] transition-transform hover:-translate-y-0.5" data-testid="link-hero-book">Book a visit <ArrowRight size={15} /></a>
+            <a href="#lookbook" className="text-[10px] font-semibold uppercase tracking-[.17em] text-[#e7d9cf]">See the work <ArrowDown className="ml-2 inline" size={14} /></a>
+          </div>
         </div>
       </div>
-      <div className="absolute bottom-8 right-8 hidden text-[9px] uppercase tracking-[.22em] text-[#e4d2c4]/70 [writing-mode:vertical-rl] md:block">Find your own kind of beautiful</div>
     </section>
     <section className="grid grid-cols-2 bg-[#dfd0c1] text-[#473a33] md:grid-cols-4">
       {[['01', 'Considered care'], ['02', 'Artists with a point of view'], ['03', 'Only what you need'], ['04', 'Beauty that feels like you']].map(([number, text]) => <div key={number} className="border-b border-r border-[#cdbbab] px-5 py-6 md:px-8 md:py-8"><span className="eyebrow">{number}</span><p className="serif mt-2 text-sm md:text-lg">{text}</p></div>)}
     </section>
-    <section id="services" className="scroll-mt-10 px-5 py-16 md:px-10 md:py-24">
+    <section id="services" className="scroll-mt-28 px-5 py-16 md:px-10 md:py-24">
       <div className="mx-auto max-w-6xl">
         <div className="flex flex-col justify-between gap-6 md:flex-row md:items-end">
           <div><p className="eyebrow">The service menu</p><h2 className="serif mt-3 text-4xl leading-tight md:text-5xl">Care, with a little <i>character.</i></h2></div>
@@ -338,44 +424,92 @@ function PublicHome() {
         </div> : <div className="mt-8 border border-dashed border-[#d6c9bc] p-8 text-sm text-[#76695e]">Our team is refreshing the menu. Please check back soon.</div>}
       </div>
     </section>
-    <section id="story" className="bg-[#473a34] px-5 py-16 text-[#f7f0e7] md:px-10 md:py-24">
+    <section id="story" className="scroll-mt-28 bg-[#473a34] px-5 py-16 text-[#f7f0e7] md:px-10 md:py-24">
       <div className="mx-auto grid max-w-6xl items-center gap-12 md:grid-cols-[1.05fr_.95fr] md:gap-20">
-        <div className="relative min-h-[330px] overflow-hidden bg-[#8b6b5b] p-7 md:min-h-[470px] md:p-10">
-          <div className="absolute inset-0 opacity-60" style={{ background: 'radial-gradient(ellipse at 70% 20%,#d7b7a1 0,transparent 40%),linear-gradient(145deg,#977766,#443833)' }} />
-          <div className="absolute inset-5 border border-[#f4e7d8]/35 md:inset-7" />
-          <div className="relative flex h-full min-h-[280px] flex-col justify-between md:min-h-[410px]">
-            <span className="serif text-6xl text-[#f7e9dc]/70">M.</span>
-            <div><p className="eyebrow !text-[#edc7b2]">The Mallinabella feeling</p><p className="serif mt-3 max-w-sm text-3xl leading-tight md:text-4xl">Beauty should feel like coming home to yourself.</p></div>
-            <p className="text-[9px] uppercase tracking-[.22em] text-[#f1ded0]/75">A little more you, every day</p>
+        <div className="relative min-h-[330px] overflow-hidden bg-[#8b6b5b] md:min-h-[470px]">
+          <img
+            src={salonImages.curls}
+            alt={`Soft curls finished at ${brandName}`}
+            className="absolute inset-0 h-full w-full object-cover"
+            loading="lazy"
+          />
+          <div className="absolute inset-0 bg-gradient-to-t from-[#241c19]/75 via-[#241c19]/15 to-transparent" />
+          <div className="absolute inset-5 border border-[#f4e7d8]/30 md:inset-7" />
+          <div className="absolute bottom-0 left-0 p-7 md:p-10">
+            <p className="eyebrow !text-[#edc7b2]">The {brandName} feeling</p>
+            <p className="serif mt-3 max-w-sm text-3xl leading-tight md:text-4xl">Beauty should feel like coming home to yourself.</p>
           </div>
         </div>
         <div>
           <p className="eyebrow !text-[#d5a38b]">A salon with a softer edge</p><h2 className="serif mt-4 text-4xl leading-[1.15] md:text-5xl">A good appointment changes more than your hair.</h2>
-          <p className="mt-6 text-sm leading-7 text-[#e0d3c9]">It’s the deep breath when you arrive. The thoughtful question before the first snip. The quiet confidence you carry out with you. Mallinabella is a neighborhood salon built on the belief that feeling cared for is part of the beauty.</p>
+          <p className="mt-6 text-sm leading-7 text-[#e0d3c9]">It’s the deep breath when you arrive. The thoughtful question before the first snip. The quiet confidence you carry out with you. {companyName} is built on the belief that feeling cared for is part of the beauty.</p>
           <a href="#book" className="mt-8 inline-flex items-center gap-3 border-b border-[#c48e75] pb-2 text-[10px] font-semibold uppercase tracking-[.16em] text-[#e5b9a2]">Meet us in the chair <ArrowRight size={14} /></a>
         </div>
       </div>
     </section>
-    <section id="team" className="px-5 py-16 md:px-10 md:py-24">
+    <section id="lookbook" className="scroll-mt-28 px-5 py-16 md:px-10 md:py-24">
+      <div className="mx-auto max-w-6xl">
+        <div className="flex flex-col justify-between gap-5 sm:flex-row sm:items-end">
+          <div>
+            <p className="eyebrow">Lookbook</p>
+            <h2 className="serif mt-3 text-4xl md:text-5xl">Real work, real light.</h2>
+          </div>
+          <p className="max-w-sm text-sm leading-6 text-[#76695e]">From the chair to the finish — a closer look at the studio and the styles that leave with you.</p>
+        </div>
+        <div className="mt-9 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+          {lookbook.map((shot, index) => (
+            <figure
+              key={shot.src}
+              className={`group relative overflow-hidden bg-[#e5d9cc] ${index === 0 ? 'sm:col-span-2 sm:min-h-[360px] lg:col-span-2 lg:row-span-2' : 'min-h-[220px]'}`}
+            >
+              <img
+                src={shot.src}
+                alt={shot.alt}
+                className="absolute inset-0 h-full w-full object-cover transition-transform duration-700 group-hover:scale-[1.04]"
+                loading="lazy"
+              />
+              <div className="absolute inset-0 bg-gradient-to-t from-[#241c19]/70 via-transparent to-transparent opacity-90" />
+              <figcaption className="absolute bottom-0 left-0 p-5 text-[10px] font-semibold uppercase tracking-[.16em] text-[#f7eee5]">
+                {shot.caption}
+              </figcaption>
+            </figure>
+          ))}
+        </div>
+      </div>
+    </section>
+    <section id="team" className="scroll-mt-28 px-5 py-16 md:px-10 md:py-24">
       <div className="mx-auto max-w-6xl">
         <div className="flex flex-col justify-between gap-5 sm:flex-row sm:items-end"><div><p className="eyebrow">The hands behind the feeling</p><h2 className="serif mt-3 text-4xl md:text-5xl">Meet your artists.</h2></div><p className="max-w-sm text-sm leading-6 text-[#76695e]">Good people, good instincts, and a shared love of making the everyday feel special.</p></div>
         {stylistsQuery.isLoading ? <div className="mt-9"><LoadingBlock rows={3} /></div> : stylistsQuery.isError ? <div className="mt-9"><QueryError retry={() => void stylistsQuery.refetch()} /></div> : (stylistsQuery.data ?? []).length ? <div className="mt-9 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-          {(stylistsQuery.data ?? []).map((stylist, index) => <article className={`group relative min-h-[260px] overflow-hidden bg-[#e5d9cc] p-6 ${index === 1 ? 'bg-[#d9c8b9]' : ''}`} key={stylist.id}>
-            {stylist.imageUrl ? <img src={stylist.imageUrl} alt={stylist.name} className="absolute inset-0 h-full w-full object-cover transition-transform duration-700 group-hover:scale-[1.03]" /> : <div className="absolute inset-0" style={{ background: index % 2 ? 'radial-gradient(ellipse at 73% 25%,#c8a391,#9a7666 42%,#52433c)' : 'radial-gradient(ellipse at 70% 23%,#dec6b1,#b69a86 40%,#67564e)' }} />}
-            <div className="absolute inset-0 bg-gradient-to-t from-[#241c19]/80 via-transparent to-transparent" />
-            <div className="absolute bottom-0 left-0 p-6 text-[#fff8ef]"><p className="eyebrow !text-[#edc5ae]">{stylist.title}</p><h3 className="serif mt-1 text-2xl">{stylist.name}</h3></div>
-          </article>)}
+          {(stylistsQuery.data ?? []).map((stylist, index) => {
+            const photo = stylist.imageUrl || stylistFallbackImages[index % stylistFallbackImages.length];
+            return (
+              <article className="group relative min-h-[320px] overflow-hidden bg-[#e5d9cc]" key={stylist.id}>
+                <img
+                  src={photo}
+                  alt={stylist.name}
+                  className="absolute inset-0 h-full w-full object-cover transition-transform duration-700 group-hover:scale-[1.03]"
+                  loading="lazy"
+                />
+                <div className="absolute inset-0 bg-gradient-to-t from-[#241c19]/85 via-[#241c19]/15 to-transparent" />
+                <div className="absolute bottom-0 left-0 p-6 text-[#fff8ef]">
+                  <p className="eyebrow !text-[#edc5ae]">{stylist.title}</p>
+                  <h3 className="serif mt-1 text-2xl">{stylist.name}</h3>
+                </div>
+              </article>
+            );
+          })}
         </div> : <p className="mt-8 text-sm text-[#76695e]">Our artists will be introduced here soon.</p>}
       </div>
     </section>
     <section className="bg-[#d8c0b0] px-5 py-14 text-center md:px-10 md:py-20">
-      <Sparkles size={20} className="mx-auto text-[#865c4e]" /><p className="eyebrow mt-4">A note from Mallinabella</p><p className="serif mx-auto mt-4 max-w-3xl text-3xl leading-tight text-[#443832] md:text-4xl">“The best version of beautiful is the one that still feels like you.”</p>
+      <Sparkles size={20} className="mx-auto text-[#865c4e]" /><p className="eyebrow mt-4">A note from {brandName}</p><p className="serif mx-auto mt-4 max-w-3xl text-3xl leading-tight text-[#443832] md:text-4xl">“The best version of beautiful is the one that still feels like you.”</p>
       <a href="#book" className="btn-primary mt-7" data-testid="link-quote-book">Find your chair <ArrowRight size={15} /></a>
     </section>
     <BookingForm />
     <footer className="bg-[#302925] px-5 py-11 text-[#f3e9de] md:px-10">
       <div className="mx-auto flex max-w-6xl flex-col gap-8 md:flex-row md:items-center md:justify-between"><Brand light /><p className="text-xs text-[#b9a99d]">Contact details to be added.</p><div className="flex gap-4"><a href="#book" aria-label="Appointment booking" data-testid="link-footer-book"><CalendarDays size={17} /></a><a href="#team" aria-label="Meet the salon artists" data-testid="link-footer-artists"><Flower2 size={17} /></a></div></div>
-      <div className="mx-auto mt-8 flex max-w-6xl justify-between border-t border-white/10 pt-5 text-[9px] uppercase tracking-[.16em] text-[#9e8d81]"><span>© Mallinabella Salon</span><Link href="/admin" data-testid="link-footer-staff">Staff access</Link></div>
+      <div className="mx-auto mt-8 flex max-w-6xl justify-between border-t border-white/10 pt-5 text-[9px] uppercase tracking-[.16em] text-[#9e8d81]"><span>© {companyName}</span><Link href="/admin" data-testid="link-footer-staff">Staff access</Link></div>
     </footer>
   </main>;
 }
@@ -406,7 +540,7 @@ function AdminShell() {
         <nav className="space-y-1">{adminTabs.map(({ id, label, icon: Icon }) => <button key={id} onClick={() => { setTab(id); setMobileMenu(false); }} className={`flex w-full items-center gap-3 px-3 py-3 text-left text-sm transition-colors ${tab === id ? 'bg-[#51413a] text-[#f1c9b3]' : 'text-[#d7c9bf] hover:bg-white/5'}`} data-testid={`button-admin-tab-${id}`}><Icon size={16} strokeWidth={1.7} />{label}</button>)}</nav>
       </div>
       <div className="mt-8 hidden border-t border-white/10 pt-5 md:block"><p className="px-3 text-[9px] uppercase tracking-[.19em] text-[#a9998d]">Quick links</p><Link href="/" className="mt-3 flex items-center gap-3 px-3 py-2 text-xs text-[#d7c9bf] hover:text-white" data-testid="link-public-site"><ArrowLeft size={15} /> View salon site</Link><Link href="/account" className="flex items-center gap-3 px-3 py-2 text-xs text-[#d7c9bf] hover:text-white" data-testid="link-admin-account"><Users size={15} /> Client account</Link></div>
-      <div className="mt-auto hidden border-t border-white/10 pt-5 md:block"><p className="px-3 text-[9px] uppercase tracking-[.17em] text-[#a9998d]">Mallinabella Salon</p><p className="px-3 pt-1 text-xs text-[#d7c9bf]">Contact details to be added.</p></div>
+      <div className="mt-auto hidden border-t border-white/10 pt-5 md:block"><p className="px-3 text-[9px] uppercase tracking-[.14em] text-[#a9998d]">{companyName}</p><p className="px-3 pt-1 text-xs text-[#d7c9bf]">Contact details to be added.</p></div>
     </aside>
     <main className="min-w-0 px-4 pb-12 pt-7 md:px-8 lg:px-12 lg:pt-10">
       <div className="mx-auto max-w-[1360px]">
@@ -473,13 +607,103 @@ function Schedule() {
   </section>;
 }
 function Clients() {
+  const queryClient = useQueryClient();
   const [search, setSearch] = useState('');
+  const [registering, setRegistering] = useState(false);
+  const [notice, setNotice] = useState('');
+  const [error, setError] = useState('');
   const query = useListClients(search ? { search } : undefined);
+  const createClient = useCreateClient();
   const clients = query.data ?? [];
-  return <section className="border border-[#e3d9ce] bg-[#fcfaf6] rise-in">
-    <div className="flex flex-wrap items-end justify-between gap-4 border-b border-[#e7ded5] p-5 md:px-7 md:py-6"><div><p className="eyebrow">The people who make the salon</p><h2 className="serif mt-1 text-2xl">Client book</h2></div><label className="relative block w-full sm:w-64"><Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-[#907f73]" /><input type="search" value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search name or email" className="field pl-9" aria-label="Search clients" data-testid="input-client-search" /></label></div>
-    {query.isLoading ? <div className="p-5"><LoadingBlock rows={6} /></div> : query.isError ? <div className="p-5"><QueryError retry={() => void query.refetch()} /></div> : clients.length ? <div className="overflow-x-auto"><table className="w-full min-w-[700px] border-collapse text-left"><thead className="bg-[#f5f0e9] text-[9px] uppercase tracking-[.15em] text-[#8b7b70]"><tr>{['Client', 'Contact', 'Visits', 'Last visit', 'Updates'].map((heading) => <th key={heading} className="px-5 py-3 font-semibold">{heading}</th>)}</tr></thead><tbody className="divide-y divide-[#eee6de]">{clients.map((client) => <tr key={client.id} className="text-xs" data-testid={`row-client-${client.id}`}><td className="px-5 py-4"><div className="flex items-center gap-3"><span className="flex h-8 w-8 items-center justify-center rounded-full bg-[#eadbd0] text-[10px] font-semibold text-[#805a4d]">{client.name.split(' ').map((part) => part[0]).slice(0, 2).join('')}</span><span className="font-semibold text-[#493d36]">{client.name}</span></div></td><td className="px-5 py-4 text-[#76695e]">{client.email}<span className="mt-1 block text-[10px] text-[#9b8c80]">{client.phone}</span></td><td className="px-5 py-4 text-[#55483f]">{client.totalVisits}</td><td className="px-5 py-4 text-[#76695e]">{client.lastVisit ? dateLabel(client.lastVisit) : '—'}</td><td className="px-5 py-4">{client.marketingOptIn ? <span className="bg-[#e7eee4] px-2 py-1 text-[9px] text-[#55715c]">Opted in</span> : <span className="text-[#a39488]">Not opted in</span>}</td></tr>)}</tbody></table></div> : <div className="px-5 py-16 text-center"><Users className="mx-auto text-[#a48a78]" size={25} /><h3 className="serif mt-4 text-xl">{search ? 'No client found.' : 'Your client book is waiting.'}</h3><p className="mt-2 text-xs text-[#8c7d72]">{search ? 'Try another name or email address.' : 'Clients will appear here after their first appointment.'}</p></div>}
-  </section>;
+
+  const submitClient = (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    const data = new FormData(event.currentTarget);
+    setError('');
+    setNotice('');
+    createClient.mutate(
+      {
+        data: {
+          name: String(data.get('name') || ''),
+          email: String(data.get('email') || ''),
+          phone: String(data.get('phone') || ''),
+          marketingOptIn: data.get('marketingOptIn') === 'on',
+        },
+      },
+      {
+        onSuccess: (client) => {
+          setRegistering(false);
+          setNotice(`${client.name} is in the client book${client.marketingOptIn ? ' and opted in for updates' : ''}.`);
+          void queryClient.invalidateQueries({ queryKey: getListClientsQueryKey() });
+          void queryClient.invalidateQueries({ queryKey: getGetDashboardSummaryQueryKey() });
+        },
+        onError: () => setError('We couldn’t save this client. Check the details and try again.'),
+      },
+    );
+  };
+
+  return (
+    <div className="space-y-4 rise-in">
+      {notice && <div className="border border-[#cddcc9] bg-[#edf3ea] px-4 py-3 text-sm text-[#4e6b55]" role="status" data-testid="status-client-notice">{notice}</div>}
+      <section className="border border-[#e3d9ce] bg-[#fcfaf6]">
+        <div className="flex flex-wrap items-end justify-between gap-4 border-b border-[#e7ded5] p-5 md:px-7 md:py-6">
+          <div>
+            <p className="eyebrow">The people who make the salon</p>
+            <h2 className="serif mt-1 text-2xl">Client book</h2>
+          </div>
+          <div className="flex w-full flex-wrap items-center gap-3 sm:w-auto">
+            <label className="relative block w-full sm:w-64">
+              <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-[#907f73]" />
+              <input type="search" value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search name or email" className="field pl-9" aria-label="Search clients" data-testid="input-client-search" />
+            </label>
+            <button className="btn-primary" onClick={() => { setRegistering(true); setError(''); setNotice(''); }} data-testid="button-register-client">
+              <Plus size={14} /> Register client
+            </button>
+          </div>
+        </div>
+        {query.isLoading ? <div className="p-5"><LoadingBlock rows={6} /></div> : query.isError ? <div className="p-5"><QueryError retry={() => void query.refetch()} /></div> : clients.length ? <div className="overflow-x-auto"><table className="w-full min-w-[700px] border-collapse text-left"><thead className="bg-[#f5f0e9] text-[9px] uppercase tracking-[.15em] text-[#8b7b70]"><tr>{['Client', 'Contact', 'Visits', 'Last visit', 'Updates'].map((heading) => <th key={heading} className="px-5 py-3 font-semibold">{heading}</th>)}</tr></thead><tbody className="divide-y divide-[#eee6de]">{clients.map((client) => <tr key={client.id} className="text-xs" data-testid={`row-client-${client.id}`}><td className="px-5 py-4"><div className="flex items-center gap-3"><span className="flex h-8 w-8 items-center justify-center rounded-full bg-[#eadbd0] text-[10px] font-semibold text-[#805a4d]">{client.name.split(' ').map((part) => part[0]).slice(0, 2).join('')}</span><span className="font-semibold text-[#493d36]">{client.name}</span></div></td><td className="px-5 py-4 text-[#76695e]">{client.email}<span className="mt-1 block text-[10px] text-[#9b8c80]">{client.phone}</span></td><td className="px-5 py-4 text-[#55483f]">{client.totalVisits}</td><td className="px-5 py-4 text-[#76695e]">{client.lastVisit ? dateLabel(client.lastVisit) : '—'}</td><td className="px-5 py-4">{client.marketingOptIn ? <span className="bg-[#e7eee4] px-2 py-1 text-[9px] text-[#55715c]">Opted in</span> : <span className="text-[#a39488]">Not opted in</span>}</td></tr>)}</tbody></table></div> : <div className="px-5 py-16 text-center"><Users className="mx-auto text-[#a48a78]" size={25} /><h3 className="serif mt-4 text-xl">{search ? 'No client found.' : 'Your client book is waiting.'}</h3><p className="mt-2 text-xs text-[#8c7d72]">{search ? 'Try another name or email address.' : 'Register a walk-in guest or wait for their first appointment.'}</p><button className="btn-primary mt-5" onClick={() => setRegistering(true)} data-testid="button-register-client-empty"><Plus size={14} /> Register client</button></div>}
+      </section>
+      {registering && (
+        <div className="fixed inset-0 z-50 flex items-end justify-center bg-[#302925]/55 p-0 sm:items-center sm:p-5" role="dialog" aria-modal="true" aria-labelledby="register-client-title">
+          <form onSubmit={submitClient} className="w-full max-w-lg border border-[#e3d9ce] bg-[#fcfaf6] p-5 sm:p-7">
+            <div className="flex items-start justify-between gap-4">
+              <div>
+                <p className="eyebrow">Walk-in registration</p>
+                <h3 id="register-client-title" className="serif mt-1 text-2xl">Register a client</h3>
+              </div>
+              <button type="button" onClick={() => setRegistering(false)} aria-label="Close" data-testid="button-close-register-client"><X size={20} /></button>
+            </div>
+            <p className="mt-3 text-xs leading-5 text-[#76695e]">Save guests from the salon floor so they can receive promotions when they opt in.</p>
+            <div className="mt-5 grid gap-4">
+              <div>
+                <label className="field-label" htmlFor="client-name">Full name</label>
+                <input id="client-name" name="name" required minLength={2} className="field" placeholder="Client name" data-testid="input-register-client-name" />
+              </div>
+              <div>
+                <label className="field-label" htmlFor="client-phone">Phone</label>
+                <input id="client-phone" name="phone" type="tel" required minLength={6} className="field" placeholder="0788…" data-testid="input-register-client-phone" />
+              </div>
+              <div>
+                <label className="field-label" htmlFor="client-email">Email address</label>
+                <input id="client-email" name="email" type="email" required className="field" placeholder="client@email.com" data-testid="input-register-client-email" />
+              </div>
+              <label className="flex items-start gap-2 text-xs leading-5 text-[#71645a]">
+                <input name="marketingOptIn" type="checkbox" defaultChecked className="mt-1 accent-[#9d6857]" data-testid="check-register-marketing-optin" />
+                Opt this client in to offers and salon updates
+              </label>
+            </div>
+            {error && <p className="mt-4 text-sm text-[#994d40]" role="alert">{error}</p>}
+            <div className="mt-6 flex justify-end gap-3">
+              <button type="button" className="btn-outline" onClick={() => setRegistering(false)} data-testid="button-cancel-register-client">Cancel</button>
+              <button className="btn-primary" disabled={createClient.isPending} data-testid="button-save-register-client">
+                {createClient.isPending ? 'Saving…' : 'Save client'}
+              </button>
+            </div>
+          </form>
+        </div>
+      )}
+    </div>
+  );
 }
 type ServiceDraft = { name: string; category: string; description: string; durationMinutes: string; price: string };
 const emptyService: ServiceDraft = { name: '', category: '', description: '', durationMinutes: '60', price: '' };
@@ -517,7 +741,7 @@ function ServiceManager() {
           <div className="sm:col-span-2"><label className="field-label" htmlFor="service-name">Service name</label><input className="field" id="service-name" name="name" required minLength={1} defaultValue={editing?.name ?? emptyService.name} data-testid="input-service-name" /></div>
           <div><label className="field-label" htmlFor="service-category">Category</label><input className="field" id="service-category" name="category" required defaultValue={editing?.category ?? ''} placeholder="Hair, skin, nails…" data-testid="input-service-category" /></div>
           <div><label className="field-label" htmlFor="service-duration">Duration in minutes</label><input className="field" id="service-duration" name="durationMinutes" type="number" min="15" step="15" required defaultValue={editing?.durationMinutes ?? 60} data-testid="input-service-duration" /></div>
-          <div><label className="field-label" htmlFor="service-price">Price in dollars</label><input className="field" id="service-price" name="price" type="number" min="0" step="1" required defaultValue={editing?.price ?? ''} data-testid="input-service-price" /></div>
+          <div><label className="field-label" htmlFor="service-price">Price in RWF</label><input className="field" id="service-price" name="price" type="number" min="0" step="100" required defaultValue={editing?.price ?? ''} data-testid="input-service-price" /></div>
           <div className="sm:col-span-2"><label className="field-label" htmlFor="service-description">Description</label><textarea className="field resize-y" id="service-description" name="description" rows={3} defaultValue={editing?.description ?? ''} data-testid="input-service-description" /></div>
         </div>
         {error && <p className="mt-4 text-sm text-[#994d40]" role="alert">{error}</p>}
@@ -581,7 +805,7 @@ function AccountPage() {
   return <main className="salon-shell min-h-[100dvh]">
     <header className="border-b border-[#e1d6ca] bg-[#f8f4ed] px-5 py-4 md:px-10"><div className="mx-auto flex max-w-6xl items-center justify-between"><Brand /><div className="flex items-center gap-4 text-xs"><Link href="/" className="text-[#77695f] hover:text-[#9d6857]" data-testid="link-account-home">Salon home</Link><button onClick={() => void signOut({ redirectUrl: basePath || '/' })} className="text-[#8c594b]" data-testid="button-account-sign-out">Sign out</button></div></div></header>
     <div className="mx-auto max-w-6xl px-5 py-10 md:px-10 md:py-16">
-      <div className="mb-8 border-b border-[#dfd4c8] pb-6"><p className="eyebrow">Your Mallinabella account</p><h1 className="serif mt-2 text-4xl">Welcome{user?.firstName ? `, ${user.firstName}` : ' back'}.</h1><p className="mt-2 text-sm text-[#76695e]">Your appointments, all in one place.</p></div>
+      <div className="mb-8 border-b border-[#dfd4c8] pb-6"><p className="eyebrow">Your {brandName} account</p><h1 className="serif mt-2 text-4xl">Welcome{user?.firstName ? `, ${user.firstName}` : ' back'}.</h1><p className="mt-2 text-sm text-[#76695e]">Your appointments, all in one place.</p></div>
       <section className="border border-[#e3d9ce] bg-[#fcfaf6]">
         <div className="border-b border-[#e7ded5] px-5 py-4 md:px-7"><p className="eyebrow">Your visits</p><h2 className="serif mt-1 text-2xl">Appointment history</h2></div>
         {bookingsQuery.isLoading ? <div className="p-5"><LoadingBlock rows={4} /></div> : bookingsQuery.isError ? <div className="p-5"><QueryError retry={() => void bookingsQuery.refetch()} /></div> : bookings.length ? <div className="divide-y divide-[#eee6de]">{bookings.map((booking) => <BookingLine key={booking.id} booking={booking} />)}</div> : <div className="px-5 py-14 text-center"><CalendarDays className="mx-auto text-[#a48a78]" size={25} /><h3 className="serif mt-4 text-xl">Your first visit is waiting.</h3><p className="mt-2 text-xs text-[#8c7d72]">Once you book, your appointments will be gathered here.</p><Link href="/#book" className="btn-primary mt-5" data-testid="link-account-book">Book a visit <ArrowRight size={14} /></Link></div>}
@@ -591,13 +815,27 @@ function AccountPage() {
   </main>;
 }
 
+function AuthUnavailable() {
+  return <main className="flex min-h-[100dvh] items-center justify-center bg-[#f3eee6] px-6">
+    <div className="max-w-md border border-[#e3d9ce] bg-[#fcfaf6] p-8 text-center">
+      <p className="eyebrow">Auth not configured</p>
+      <h1 className="serif mt-3 text-3xl text-[#392f2a]">Add your Clerk keys</h1>
+      <p className="mt-3 text-sm text-[#76695e]">Set <code className="text-[#9d6857]">VITE_CLERK_PUBLISHABLE_KEY</code> in <code className="text-[#9d6857]">artifacts/mallinabella-salon/.env</code> to enable sign-in.</p>
+      <Link href="/" className="btn-primary mt-6" data-testid="link-auth-home">Back to salon home</Link>
+    </div>
+  </main>;
+}
 function ProtectedAdmin() {
+  // Allow local staff use before Clerk secret/admin role is fully wired.
+  if (!clerkConfigured) return <AdminShell />;
   return <><Show when="signed-in"><AdminShell /></Show><Show when="signed-out"><Redirect to="/sign-in" /></Show></>;
 }
 function ProtectedAccount() {
+  if (!clerkConfigured) return <AuthUnavailable />;
   return <><Show when="signed-in"><AccountPage /></Show><Show when="signed-out"><Redirect to="/sign-in" /></Show></>;
 }
 function SignInPage() {
+  if (!clerkConfigured) return <AuthUnavailable />;
   return <main className="flex min-h-[100dvh] items-center justify-center bg-[#f3eee6] px-4 py-8">
     <div className="grid w-full max-w-5xl overflow-hidden bg-[#fcfaf6] shadow-[0_24px_80px_rgba(68,48,37,.14)] md:grid-cols-[.8fr_1fr]">
       <div className="relative hidden min-h-[620px] flex-col justify-between overflow-hidden bg-[#443731] p-10 text-[#f7eee5] md:flex">
@@ -610,6 +848,7 @@ function SignInPage() {
   </main>;
 }
 function SignUpPage() {
+  if (!clerkConfigured) return <AuthUnavailable />;
   return <main className="flex min-h-[100dvh] items-center justify-center bg-[#f3eee6] px-4 py-8">
     <div className="grid w-full max-w-5xl overflow-hidden bg-[#fcfaf6] shadow-[0_24px_80px_rgba(68,48,37,.14)] md:grid-cols-[.8fr_1fr]">
       <div className="relative hidden min-h-[620px] flex-col justify-between overflow-hidden bg-[#443731] p-10 text-[#f7eee5] md:flex">
@@ -649,29 +888,45 @@ function Router() {
     </Switch>
   </ErrorBoundary>;
 }
-function ClerkProviderWithRoutes() {
-  const [, setLocation] = useLocation();
-  return <ClerkProvider
-    publishableKey={clerkPubKey}
-    proxyUrl={clerkProxyUrl}
-    appearance={clerkAppearance}
-    signInUrl={`${basePath}/sign-in`}
-    signUpUrl={`${basePath}/sign-up`}
-    localization={{
-      signIn: { start: { title: 'Welcome back', subtitle: 'Sign in to return to your salon account' } },
-      signUp: { start: { title: 'Make yourself at home', subtitle: 'Create your Mallinabella account' } },
-    }}
-    routerPush={(to) => setLocation(stripBase(to))}
-    routerReplace={(to) => setLocation(stripBase(to), { replace: true })}
-  >
+function AppProviders({ children }: { children: ReactNode }) {
+  return (
     <QueryClientProvider client={queryClient}>
       <TooltipProvider>
-        <ClerkQueryClientCacheInvalidator />
-        <Router />
+        {children}
         <Toaster />
       </TooltipProvider>
     </QueryClientProvider>
-  </ClerkProvider>;
+  );
+}
+function ClerkProviderWithRoutes() {
+  const [, setLocation] = useLocation();
+  if (!clerkConfigured) {
+    return (
+      <AppProviders>
+        <Router />
+      </AppProviders>
+    );
+  }
+  return (
+    <ClerkProvider
+      publishableKey={clerkPubKey}
+      {...(clerkProxyUrl ? { proxyUrl: clerkProxyUrl } : {})}
+      appearance={clerkAppearance}
+      signInUrl={`${basePath}/sign-in`}
+      signUpUrl={`${basePath}/sign-up`}
+      localization={{
+        signIn: { start: { title: 'Welcome back', subtitle: 'Sign in to return to your salon account' } },
+        signUp: { start: { title: 'Make yourself at home', subtitle: `Create your ${brandName} account` } },
+      }}
+      routerPush={(to) => setLocation(stripBase(to))}
+      routerReplace={(to) => setLocation(stripBase(to), { replace: true })}
+    >
+      <AppProviders>
+        <ClerkQueryClientCacheInvalidator />
+        <Router />
+      </AppProviders>
+    </ClerkProvider>
+  );
 }
 function App() {
   return <WouterRouter base={basePath}><ClerkProviderWithRoutes /></WouterRouter>;

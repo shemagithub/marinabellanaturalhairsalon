@@ -14,6 +14,7 @@ export * from './bookingUpdateStatus';
 export * from './campaignInput';
 export * from './campaignSendResult';
 export * from './client';
+export * from './clientInput';
 export * from './dashboardSummary';
 export * from './getAvailabilityParams';
 export * from './healthStatus';

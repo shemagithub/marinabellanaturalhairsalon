@@ -4,6 +4,12 @@ import { prisma } from "@workspace/db";
 import { getVerifiedClerkEmail } from "../lib/salon-domain";
 
 export const requireSalonAdmin: RequestHandler = async (req, res, next) => {
+  // Local development without Clerk secret: allow staff APIs so the portal is usable.
+  if (!process.env.CLERK_SECRET_KEY && process.env.NODE_ENV !== "production") {
+    next();
+    return;
+  }
+
   const { userId } = getAuth(req);
   if (!userId) {
     res.status(401).json({ error: "Sign in to access the staff dashboard." });

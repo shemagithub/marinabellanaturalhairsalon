@@ -241,6 +241,27 @@ paths:
                 type: array
                 items:
                   $ref: "#/components/schemas/Client"
+    post:
+      operationId: createClient
+      tags: [salon]
+      summary: Register a salon client
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ClientInput"
+      responses:
+        "201":
+          description: Client created or updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Client"
+        "400":
+          description: Invalid client details
+        "409":
+          description: Client email already registered
   /account/bookings:
     get:
       operationId: getMyBookings
@@ -422,6 +443,14 @@ components:
         totalVisits: { type: integer }
         marketingOptIn: { type: boolean }
         lastVisit: { type: ["string", "null"], format: date-time }
+    ClientInput:
+      type: object
+      required: [name, email, phone]
+      properties:
+        name: { type: string, minLength: 2 }
+        email: { type: string, format: email }
+        phone: { type: string, minLength: 6 }
+        marketingOptIn: { type: boolean }
     DashboardSummary:
       type: object
       required: [todayBookings, upcomingBookings, monthlyRevenue, totalClients, marketingClients, nextAppointments]

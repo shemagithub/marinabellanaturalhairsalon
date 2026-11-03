@@ -1,5 +1,7 @@
 import { Router, type IRouter } from "express";
 import {
+  CreateClientBody,
+  CreateClientResponse,
   GetDashboardSummaryResponse,
   ListClientsQueryParams,
   ListClientsResponse,
@@ -9,6 +11,26 @@ import { requireSalonAdmin } from "../../middlewares/requireSalonAdmin";
 import { kigaliDayBounds, toBooking } from "../../lib/salon-domain";
 
 const router: IRouter = Router();
+
+function toClientRecord(client: {
+  id: string;
+  name: string;
+  email: string;
+  phone: string;
+  totalVisits: number;
+  marketingOptIn: boolean;
+  bookings?: { startAt: Date }[];
+}) {
+  return {
+    id: client.id,
+    name: client.name,
+    email: client.email,
+    phone: client.phone,
+    totalVisits: client.totalVisits,
+    marketingOptIn: client.marketingOptIn,
+    lastVisit: client.bookings?.[0]?.startAt.toISOString() ?? null,
+  };
+}
 
 router.get("/clients", requireSalonAdmin, async (req, res): Promise<void> => {
   const parsed = ListClientsQueryParams.safeParse(req.query);
@@ -40,16 +62,71 @@ router.get("/clients", requireSalonAdmin, async (req, res): Promise<void> => {
     },
     orderBy: { createdAt: "desc" },
   });
-  const result = clients.map((client) => ({
-    id: client.id,
-    name: client.name,
-    email: client.email,
-    phone: client.phone,
-    totalVisits: client.totalVisits,
-    marketingOptIn: client.marketingOptIn,
-    lastVisit: client.bookings[0]?.startAt.toISOString() ?? null,
-  }));
+  const result = clients.map((client) => toClientRecord(client));
   res.json(ListClientsResponse.parse(result));
+});
+
+router.post("/clients", requireSalonAdmin, async (req, res): Promise<void> => {
+  const parsed = CreateClientBody.safeParse(req.body);
+  if (!parsed.success) {
+    res.status(400).json({ error: parsed.error.message });
+    return;
+  }
+
+  const name = parsed.data.name.trim();
+  const email = parsed.data.email.trim().toLowerCase();
+  const phone = parsed.data.phone.trim();
+  const marketingOptIn = parsed.data.marketingOptIn ?? false;
+
+  const existing = await prisma.user.findUnique({ where: { email } });
+  if (existing && existing.role !== "client") {
+    res.status(409).json({ error: "That email belongs to a staff account." });
+    return;
+  }
+
+  const client = existing
+    ? await prisma.user.update({
+        where: { id: existing.id },
+        data: {
+          name,
+          phone,
+          marketingOptIn: existing.marketingOptIn || marketingOptIn,
+        },
+        include: {
+          bookings: {
+            where: { status: "completed" },
+            orderBy: { startAt: "desc" },
+            take: 1,
+            select: { startAt: true },
+          },
+        },
+      })
+    : await prisma.user.create({
+        data: {
+          name,
+          email,
+          phone,
+          role: "client",
+          marketingOptIn,
+        },
+        include: {
+          bookings: {
+            where: { status: "completed" },
+            orderBy: { startAt: "desc" },
+            take: 1,
+            select: { startAt: true },
+          },
+        },
+      });
+
+  req.log.info(
+    { clientId: client.id, created: !existing, marketingOptIn: client.marketingOptIn },
+    existing ? "Salon client updated from staff registration" : "Salon client registered by staff",
+  );
+
+  res
+    .status(existing ? 200 : 201)
+    .json(CreateClientResponse.parse(toClientRecord(client)));
 });
 
 router.get("/dashboard/summary", requireSalonAdmin, async (_req, res): Promise<void> => {

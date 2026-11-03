@@ -126,6 +126,15 @@ export interface Client {
   lastVisit?: string | null;
 }
 
+export interface ClientInput {
+  /** @minLength 2 */
+  name: string;
+  email: string;
+  /** @minLength 6 */
+  phone: string;
+  marketingOptIn?: boolean;
+}
+
 export interface DashboardSummary {
   todayBookings: number;
   upcomingBookings: number;

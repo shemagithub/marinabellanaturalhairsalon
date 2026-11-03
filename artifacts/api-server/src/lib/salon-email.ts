@@ -34,7 +34,7 @@ export function bookingConfirmationEmail(input: {
   }).format(input.startAt);
   return {
     to: input.to,
-    subject: `Your Mallinabella appointment is confirmed`,
+    subject: `Your Marina Bella appointment is confirmed`,
     template: "booking-confirmation",
     html: `<p>Dear ${escapeHtml(input.clientName)},</p><p>Your ${escapeHtml(input.serviceName)} appointment with ${escapeHtml(input.stylistName)} is confirmed for ${escapeHtml(date)}.</p><p>We look forward to welcoming you.</p>`,
   };
@@ -53,7 +53,7 @@ export function appointmentReminderEmail(input: {
   }).format(input.startAt);
   return {
     to: input.to,
-    subject: `A reminder about your Mallinabella appointment`,
+    subject: `A reminder about your Marina Bella appointment`,
     template: "appointment-reminder",
     html: `<p>Dear ${escapeHtml(input.clientName)},</p><p>This is a friendly reminder of your ${escapeHtml(input.serviceName)} appointment tomorrow, ${escapeHtml(date)}.</p>`,
   };
@@ -72,7 +72,7 @@ export function promotionEmail(input: {
     to: input.to,
     subject: input.subject,
     template: "promotion",
-    html: `<main><h1>${escapeHtml(input.subject)}</h1>${paragraphs}<p>Thank you for being part of the Mallinabella community.</p><small>You are receiving this message because you opted in to salon updates.</small></main>`,
+    html: `<main><h1>${escapeHtml(input.subject)}</h1>${paragraphs}<p>Thank you for being part of the Marina Bella Natural Hair Saloon community.</p><small>You are receiving this message because you opted in to salon updates.</small></main>`,
   };
 }
 

@@ -257,6 +257,33 @@ export const ListClientsResponse = zod.array(ListClientsResponseItem)
 
 
 /**
+ * @summary Register a salon client
+ */
+export const createClientBodyNameMin = 2;
+
+export const createClientBodyPhoneMin = 6;
+
+
+
+export const CreateClientBody = zod.object({
+  "name": zod.string().min(createClientBodyNameMin),
+  "email": zod.string().email(),
+  "phone": zod.string().min(createClientBodyPhoneMin),
+  "marketingOptIn": zod.boolean().optional()
+})
+
+export const CreateClientResponse = zod.object({
+  "id": zod.string(),
+  "name": zod.string(),
+  "email": zod.string().email(),
+  "phone": zod.string(),
+  "totalVisits": zod.number().int(),
+  "marketingOptIn": zod.boolean(),
+  "lastVisit": zod.coerce.date().nullish()
+})
+
+
+/**
  * @summary Get appointments for the signed-in client
  */
 export const GetMyBookingsResponseItem = zod.object({
